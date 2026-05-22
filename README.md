@@ -121,6 +121,18 @@ git pull
 sudo systemctl restart tgadmin
 ```
 
+## 常见问题
+
+如果创建虚拟环境时提示 `ensurepip is not available`，先安装对应版本的 venv 包，再删除失败的 `.venv` 重新部署：
+
+```bash
+sudo apt install python3-venv
+rm -rf .venv
+sudo bash setup_debian.sh
+```
+
+如果报错里明确写的是版本号，比如 `python3.13-venv`，就安装那个版本对应的包。
+
 ## 测试
 
 ```bash
