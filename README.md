@@ -121,6 +121,19 @@ git pull
 sudo systemctl restart tgadmin
 ```
 
+## 卸载删除
+
+如果要删除整个机器人任务和项目文件，在 VPS 上执行：
+
+```bash
+sudo systemctl disable --now tgadmin
+sudo rm -f /etc/systemd/system/tgadmin.service
+sudo systemctl daemon-reload
+rm -rf /home/admin/telegram-moderation-bot
+```
+
+如果项目目录不在 `/home/admin/telegram-moderation-bot`，把最后一行改成你的实际路径。需要一起清理配置时，再删除项目目录里的 `.env` 和 `.venv`。
+
 ## 常见问题
 
 如果创建虚拟环境时提示 `ensurepip is not available`，先安装对应版本的 venv 包，再删除失败的 `.venv` 重新部署：
