@@ -4,8 +4,8 @@
 
 你只需要记住两条命令：
 
-- 首次部署：`sudo bash setup_debian.sh`
-- 后续更新：`sudo bash update_debian.sh`
+- 首次部署：`sudo bash scripts/setup_debian.sh`
+- 后续更新：`bash scripts/update_debian.sh`
 
 首次部署时，脚本只会询问一次 `BOT_TOKEN`，其余配置自动完成。
 
@@ -30,7 +30,7 @@ cd tgadmin
 ### 3) 执行一键部署
 
 ```bash
-sudo bash setup_debian.sh
+sudo bash scripts/setup_debian.sh
 ```
 
 脚本会自动：
@@ -59,7 +59,7 @@ docker compose logs -f bot
 
 ```bash
 cd tgadmin
-sudo bash update_debian.sh
+bash scripts/update_debian.sh
 ```
 
 更新脚本会自动完成：

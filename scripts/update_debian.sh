@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ROOT_DIR}/.env"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  if command -v sudo >/dev/null 2>&1; then
+    exec sudo bash "${BASH_SOURCE[0]}" "$@"
+  fi
   echo "请使用 sudo 运行: sudo bash scripts/update_debian.sh"
   exit 1
 fi
@@ -41,7 +44,7 @@ generate_secret() {
 }
 
 if [[ ! -f "${ENV_FILE}" ]]; then
-  echo ".env 不存在，请先运行 sudo bash setup_debian.sh"
+  echo ".env 不存在，请先运行 sudo bash scripts/setup_debian.sh"
   exit 1
 fi
 

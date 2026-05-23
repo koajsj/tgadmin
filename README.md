@@ -4,9 +4,9 @@
 
 ## 你最关心的结论
 
-- 部署已简化为：**VPS 上执行 `sudo bash setup_debian.sh`，只输入一次 Bot Token 即可完成**。
+- 部署已简化为：**VPS 上执行 `sudo bash scripts/setup_debian.sh`，只输入一次 Bot Token 即可完成**。
 - 不需要手动写 `.env`，脚本会自动生成并写入默认配置。
-- 更新已简化为：`sudo bash update_debian.sh`。
+- 更新已简化为：`bash scripts/update_debian.sh`。
 - 已内置分级权限：普通群管理员仅可低风险操作，Owner 才可高风险/全局操作。
 
 ---
@@ -141,7 +141,7 @@ cd tgadmin
 ### 4.3 一键部署
 
 ```bash
-sudo bash setup_debian.sh
+sudo bash scripts/setup_debian.sh
 ```
 
 脚本会自动完成：
@@ -167,7 +167,7 @@ docker compose logs -f bot
 进入项目目录后执行：
 
 ```bash
-sudo bash update_debian.sh
+bash scripts/update_debian.sh
 ```
 
 更新脚本会自动：
@@ -280,7 +280,10 @@ Get-Content C:\Users\Administrator\Desktop\admin\bot\handlers\private_panel.py
 python -m unittest discover -s tests -v   # 失败：系统 python.exe 不可访问
 C:\Users\Administrator\Desktop\admin\.venv\Scripts\python.exe -m unittest discover -s tests -v
 
-# 4) 变更核对
+# 4) 更新命令核对
+bash scripts/update_debian.sh
+
+# 5) 变更核对
 git -c safe.directory=C:/Users/Administrator/Desktop/admin -C C:/Users/Administrator/Desktop/admin --no-pager diff -- bot/handlers/private_panel.py README.md
 git -c safe.directory=C:/Users/Administrator/Desktop/admin -C C:/Users/Administrator/Desktop/admin status --short --branch
 ```
@@ -288,6 +291,32 @@ git -c safe.directory=C:/Users/Administrator/Desktop/admin -C C:/Users/Administr
 ### 9.3 测试结果
 
 - `unittest` 共执行 16 项，全部通过（`OK`）。
+
+---
+
+### 9.4 本次补充核对
+
+```powershell
+# 检查旧部署命令是否还有残留
+rg -n "sudo bash setup_debian.sh|sudo bash update_debian.sh|bash setup_debian.sh|bash update_debian.sh" C:\Users\Administrator\Desktop\admin -S
+
+# 本机环境检查 bash 是否可用
+Get-Command bash
+
+# 查看当前工作区状态
+git -c safe.directory=C:/Users/Administrator/Desktop/admin -C C:/Users/Administrator/Desktop/admin status --short --branch
+```
+
+- 结果：旧的部署命令引用已清理完毕。
+- 结果：当前 Windows 本机环境未安装 `bash`，因此无法在本机直接做 bash 语法检查。
+
+---
+
+### 9.5 选择群组按钮修复
+
+- 修复私聊面板首页 `选择群组（进入群管理）` 按钮在群列表加载阶段无即时反馈的问题。
+- 处理：点击后先立即 `answerCallbackQuery`，再加载群列表；如果 Redis 或数据库读取失败，会直接提示 `群组列表加载失败，请稍后重试`。
+- 目标：避免用户在群列表加载稍慢时误以为按钮没有响应。
 
 ---
 

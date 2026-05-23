@@ -6,7 +6,7 @@ ENV_FILE="${ROOT_DIR}/.env"
 ENV_EXAMPLE_FILE="${ROOT_DIR}/.env.example"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-  echo "请使用 sudo 运行: sudo bash setup_debian.sh"
+  echo "请使用 sudo 运行: sudo bash scripts/setup_debian.sh"
   exit 1
 fi
 

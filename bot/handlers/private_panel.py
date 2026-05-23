@@ -260,19 +260,25 @@ async def panel_callback(query: CallbackQuery, app_context: AppContext) -> None:
                 await query.answer("参数错误", show_alert=True)
                 return
             page = parsed_page
-        groups = await _groups_for_user(query.message, app_context)
-        if len(groups) == 0:
-            await _edit_panel_text(query, "当前没有可操作群组。", home_keyboard())
+        await query.answer()
+        try:
+            groups = await _groups_for_user(query.message, app_context)
+        except (RedisError, SQLAlchemyError):
+            await query.message.answer("群组列表加载失败，请稍后重试")
             return
+
+        if len(groups) == 0:
+            await query.message.edit_text("当前没有可操作群组。", reply_markup=home_keyboard())
+            return
+
         total_pages = (len(groups) + GROUPS_PAGE_SIZE - 1) // GROUPS_PAGE_SIZE
         if page >= total_pages:
             page = 0
         start = page * GROUPS_PAGE_SIZE
         page_groups = groups[start : start + GROUPS_PAGE_SIZE]
-        await _edit_panel_text(
-            query,
+        await query.message.edit_text(
             f"请选择群组（第 {page + 1}/{total_pages} 页）",
-            groups_keyboard(page_groups, page, total_pages),
+            reply_markup=groups_keyboard(page_groups, page, total_pages),
         )
         return
 
