@@ -74,6 +74,12 @@ class PermissionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.role, ActorRole.MEMBER)
 
+    async def test_group_admin_cannot_export_data(self) -> None:
+        bot = FakeBot({(-1001, 2000): "administrator"})
+        decision = await authorize_action(bot, self._settings(), 2000, -1001, PermissionAction.EXPORT_DATA, None)
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.role, ActorRole.GROUP_ADMIN)
+
 
 if __name__ == "__main__":
     unittest.main()

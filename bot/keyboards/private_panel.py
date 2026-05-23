@@ -12,11 +12,18 @@ def home_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def groups_keyboard(items: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+def groups_keyboard(items: list[tuple[int, str]], page: int, total_pages: int) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for chat_id, title in items:
         label = f"{title} ({chat_id})"
         rows.append([InlineKeyboardButton(text=label[:60], callback_data=f"panel:g:{chat_id}")])
+    nav_row: list[InlineKeyboardButton] = []
+    if page > 0:
+        nav_row.append(InlineKeyboardButton(text="上一页", callback_data=f"panel:groups:{page - 1}"))
+    if page + 1 < total_pages:
+        nav_row.append(InlineKeyboardButton(text="下一页", callback_data=f"panel:groups:{page + 1}"))
+    if len(nav_row) > 0:
+        rows.append(nav_row)
     rows.append([InlineKeyboardButton(text="返回首页", callback_data="panel:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

@@ -17,7 +17,7 @@ def build_action_text(action: str, duration_seconds: int | None) -> str:
 
 async def send_log(bot: Bot, log_chat_id: int | None, chat_id: int, user_id: int, reason: str, score: int, action: str, excerpt: str) -> bool:
     if log_chat_id is None:
-        return False
+        return True
     text = (
         "#moderation\n"
         f"chat_id={chat_id}\n"

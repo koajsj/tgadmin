@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+import json
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
@@ -31,6 +32,8 @@ from bot.utils.permissions import authorize_action, is_owner
 
 
 router = Router(name="private_panel")
+GROUPS_PAGE_SIZE = 8
+GROUPS_CACHE_TTL_SECONDS = 90
 
 
 def _panel_home_text() -> str:
@@ -45,7 +48,50 @@ def _panel_home_text() -> str:
     )
 
 
-async def _groups_for_user(message: Message, app_context: AppContext) -> list[tuple[int, str]]:
+def _groups_cache_key(user_id: int) -> str:
+    return f"panel:groups:{user_id}"
+
+
+def _serialize_groups(items: list[tuple[int, str]]) -> str:
+    payload = [{"chat_id": chat_id, "title": title} for chat_id, title in items]
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _deserialize_groups(raw: str) -> list[tuple[int, str]] | None:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, list):
+        return None
+    result: list[tuple[int, str]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            return None
+        chat_id = item.get("chat_id")
+        title = item.get("title")
+        if not isinstance(chat_id, int) or not isinstance(title, str):
+            return None
+        result.append((chat_id, title))
+    return result
+
+
+async def _load_cached_groups(app_context: AppContext, user_id: int) -> list[tuple[int, str]] | None:
+    cache_value = await app_context.redis.get(_groups_cache_key(user_id))
+    if cache_value is None:
+        return None
+    return _deserialize_groups(cache_value)
+
+
+async def _store_cached_groups(app_context: AppContext, user_id: int, groups: list[tuple[int, str]]) -> None:
+    await app_context.redis.set(
+        _groups_cache_key(user_id),
+        _serialize_groups(groups),
+        ex=GROUPS_CACHE_TTL_SECONDS,
+    )
+
+
+async def _groups_for_user_uncached(message: Message, app_context: AppContext) -> list[tuple[int, str]]:
     user = message.from_user
     if user is None:
         return []
@@ -69,6 +115,18 @@ async def _groups_for_user(message: Message, app_context: AppContext) -> list[tu
         if decision.allowed:
             result.append((item.id, item.title or "(无标题群组)"))
     return result
+
+
+async def _groups_for_user(message: Message, app_context: AppContext) -> list[tuple[int, str]]:
+    user = message.from_user
+    if user is None:
+        return []
+    cached = await _load_cached_groups(app_context, user.id)
+    if cached is not None:
+        return cached
+    groups = await _groups_for_user_uncached(message, app_context)
+    await _store_cached_groups(app_context, user.id, groups)
+    return groups
 
 
 async def _show_home(message: Message) -> None:
@@ -173,12 +231,27 @@ async def panel_callback(query: CallbackQuery, app_context: AppContext) -> None:
         return
 
     if cmd == "groups":
+        page = 0
+        if len(parts) >= 3:
+            parsed_page = _parse_int_part(parts, 2)
+            if parsed_page is None or parsed_page < 0:
+                await query.answer("参数错误", show_alert=True)
+                return
+            page = parsed_page
         groups = await _groups_for_user(query.message, app_context)
         if len(groups) == 0:
             await query.message.edit_text("当前没有可操作群组。", reply_markup=home_keyboard())
             await query.answer()
             return
-        await query.message.edit_text("请选择群组", reply_markup=groups_keyboard(groups))
+        total_pages = (len(groups) + GROUPS_PAGE_SIZE - 1) // GROUPS_PAGE_SIZE
+        if page >= total_pages:
+            page = 0
+        start = page * GROUPS_PAGE_SIZE
+        page_groups = groups[start : start + GROUPS_PAGE_SIZE]
+        await query.message.edit_text(
+            f"请选择群组（第 {page + 1}/{total_pages} 页）",
+            reply_markup=groups_keyboard(page_groups, page, total_pages),
+        )
         await query.answer()
         return
 

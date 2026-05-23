@@ -7,10 +7,15 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import ChatPermissions, Message
 
 from bot.schemas.moderation import EnforcementDecision
+from bot.services.telegram_retry import call_telegram_with_retry
 
 
 class ModerationActionError(RuntimeError):
     """Raised when moderation action cannot be executed."""
+
+
+TELEGRAM_RETRY_ATTEMPTS = 3
+TELEGRAM_RETRY_DELAY_SECONDS = 0.6
 
 
 def decide_escalation(violation_count: int, mute_minutes_step3: int, mute_hours_step4: int) -> EnforcementDecision:
@@ -26,9 +31,18 @@ def decide_escalation(violation_count: int, mute_minutes_step3: int, mute_hours_
 
 
 async def try_delete_message(message: Message) -> bool:
-    try:
+    async def _do_delete() -> bool:
         await message.delete()
         return True
+
+    try:
+        return await call_telegram_with_retry(
+            operation_name="delete_message",
+            request_context={"chat_id": message.chat.id if message.chat is not None else None, "message_id": message.message_id},
+            retry_attempts=TELEGRAM_RETRY_ATTEMPTS,
+            retry_delay_seconds=TELEGRAM_RETRY_DELAY_SECONDS,
+            action=_do_delete,
+        )
     except (TelegramBadRequest, TelegramForbiddenError):
         return False
 
@@ -42,15 +56,34 @@ async def apply_decision(bot: Bot, chat_id: int, user_id: int, decision: Enforce
             raise ModerationActionError("mute requires duration_seconds")
         until = datetime.now(timezone.utc) + timedelta(seconds=decision.duration_seconds)
         permissions = ChatPermissions(can_send_messages=False)
-        try:
+
+        async def _do_mute() -> None:
             await bot.restrict_chat_member(chat_id=chat_id, user_id=user_id, permissions=permissions, until_date=until)
+
+        try:
+            await call_telegram_with_retry(
+                operation_name="restrict_chat_member",
+                request_context={"chat_id": chat_id, "user_id": user_id, "duration_seconds": decision.duration_seconds},
+                retry_attempts=TELEGRAM_RETRY_ATTEMPTS,
+                retry_delay_seconds=TELEGRAM_RETRY_DELAY_SECONDS,
+                action=_do_mute,
+            )
             return "mute"
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
             raise ModerationActionError(f"failed to mute user chat_id={chat_id} user_id={user_id}: {exc}") from exc
 
     if decision.action == "ban":
-        try:
+        async def _do_ban() -> None:
             await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+
+        try:
+            await call_telegram_with_retry(
+                operation_name="ban_chat_member",
+                request_context={"chat_id": chat_id, "user_id": user_id},
+                retry_attempts=TELEGRAM_RETRY_ATTEMPTS,
+                retry_delay_seconds=TELEGRAM_RETRY_DELAY_SECONDS,
+                action=_do_ban,
+            )
             return "ban"
         except (TelegramBadRequest, TelegramForbiddenError) as exc:
             raise ModerationActionError(f"failed to ban user chat_id={chat_id} user_id={user_id}: {exc}") from exc
@@ -59,8 +92,17 @@ async def apply_decision(bot: Bot, chat_id: int, user_id: int, decision: Enforce
 
 
 async def unban_user(bot: Bot, chat_id: int, user_id: int) -> None:
-    try:
+    async def _do_unban() -> None:
         await bot.unban_chat_member(chat_id=chat_id, user_id=user_id, only_if_banned=False)
+
+    try:
+        await call_telegram_with_retry(
+            operation_name="unban_chat_member",
+            request_context={"chat_id": chat_id, "user_id": user_id},
+            retry_attempts=TELEGRAM_RETRY_ATTEMPTS,
+            retry_delay_seconds=TELEGRAM_RETRY_DELAY_SECONDS,
+            action=_do_unban,
+        )
     except (TelegramBadRequest, TelegramForbiddenError) as exc:
         raise ModerationActionError(f"failed to unban user chat_id={chat_id} user_id={user_id}: {exc}") from exc
 
@@ -68,14 +110,33 @@ async def unban_user(bot: Bot, chat_id: int, user_id: int) -> None:
 async def mute_user(bot: Bot, chat_id: int, user_id: int, duration_seconds: int) -> None:
     until = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
     permissions = ChatPermissions(can_send_messages=False)
-    try:
+
+    async def _do_mute() -> None:
         await bot.restrict_chat_member(chat_id=chat_id, user_id=user_id, permissions=permissions, until_date=until)
+
+    try:
+        await call_telegram_with_retry(
+            operation_name="restrict_chat_member",
+            request_context={"chat_id": chat_id, "user_id": user_id, "duration_seconds": duration_seconds},
+            retry_attempts=TELEGRAM_RETRY_ATTEMPTS,
+            retry_delay_seconds=TELEGRAM_RETRY_DELAY_SECONDS,
+            action=_do_mute,
+        )
     except (TelegramBadRequest, TelegramForbiddenError) as exc:
         raise ModerationActionError(f"failed to mute user chat_id={chat_id} user_id={user_id}: {exc}") from exc
 
 
 async def ban_user(bot: Bot, chat_id: int, user_id: int) -> None:
-    try:
+    async def _do_ban() -> None:
         await bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+
+    try:
+        await call_telegram_with_retry(
+            operation_name="ban_chat_member",
+            request_context={"chat_id": chat_id, "user_id": user_id},
+            retry_attempts=TELEGRAM_RETRY_ATTEMPTS,
+            retry_delay_seconds=TELEGRAM_RETRY_DELAY_SECONDS,
+            action=_do_ban,
+        )
     except (TelegramBadRequest, TelegramForbiddenError) as exc:
         raise ModerationActionError(f"failed to ban user chat_id={chat_id} user_id={user_id}: {exc}") from exc

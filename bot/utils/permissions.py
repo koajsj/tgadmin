@@ -1,16 +1,32 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError
 
 from bot.config import Settings
 from bot.schemas.permissions import ActorRole, PermissionAction, PermissionDecision
+from bot.services.telegram_retry import call_telegram_with_retry
+
+
+TELEGRAM_RETRY_ATTEMPTS = 3
+TELEGRAM_RETRY_DELAY_SECONDS = 0.6
 
 
 async def is_group_admin(bot: Bot, chat_id: int, user_id: int) -> bool:
+    async def _do_get_member() -> object:
+        return await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+
     try:
-        member = await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+        member = await call_telegram_with_retry(
+            operation_name="get_chat_member",
+            request_context={"chat_id": chat_id, "user_id": user_id},
+            retry_attempts=TELEGRAM_RETRY_ATTEMPTS,
+            retry_delay_seconds=TELEGRAM_RETRY_DELAY_SECONDS,
+            action=_do_get_member,
+        )
     except (TelegramBadRequest, TelegramForbiddenError):
+        return False
+    except TelegramAPIError:
         return False
     return member.status in {"creator", "administrator"}
 
