@@ -1,4 +1,0 @@
-# One keyword per line, case-insensitive. Lines starting with # are ignored.
-free money
-crypto
-airdrop

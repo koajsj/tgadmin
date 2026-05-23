@@ -1,0 +1,23 @@
+{
+  "low": {
+    "action": "log",
+    "notify_admin": false,
+    "require_confirm": false
+  },
+  "medium": {
+    "action": "warn",
+    "notify_admin": true,
+    "require_confirm": false
+  },
+  "high": {
+    "action": "mute",
+    "mute_seconds": 600,
+    "notify_admin": true,
+    "require_confirm": false
+  },
+  "severe": {
+    "action": "ban",
+    "notify_admin": true,
+    "require_confirm": true
+  }
+}

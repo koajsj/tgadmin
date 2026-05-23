@@ -6,7 +6,7 @@ from enum import Enum
 
 class ActorRole(str, Enum):
     OWNER = "owner"
-    GROUP_ADMIN = "group_admin"
+    ADMIN = "admin"
     MEMBER = "member"
 
 

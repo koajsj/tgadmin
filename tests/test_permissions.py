@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 import unittest
+from unittest.mock import patch
 
 from bot.config import Settings
 from bot.schemas.permissions import ActorRole, PermissionAction
@@ -44,41 +45,48 @@ class PermissionTests(unittest.IsolatedAsyncioTestCase):
             auto_init_schema=False,
             keyword_refresh_seconds=60,
             group_admin_max_mute_seconds=3600,
+            admin_sync_interval_seconds=86400,
         )
 
     async def test_owner_can_ban(self) -> None:
         bot = FakeBot({})
-        decision = await authorize_action(bot, self._settings(), 1000, -1001, PermissionAction.BAN, None)
+        with patch("bot.utils.permissions._is_admin_granted", return_value=False):
+            decision = await authorize_action(bot, self._settings(), None, 1000, -1001, PermissionAction.BAN, None)  # type: ignore[arg-type]
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.role, ActorRole.OWNER)
 
-    async def test_group_admin_cannot_ban(self) -> None:
+    async def test_group_admin_can_ban(self) -> None:
         bot = FakeBot({(-1001, 2000): "administrator"})
-        decision = await authorize_action(bot, self._settings(), 2000, -1001, PermissionAction.BAN, None)
-        self.assertFalse(decision.allowed)
-        self.assertEqual(decision.role, ActorRole.GROUP_ADMIN)
+        with patch("bot.utils.permissions._is_admin_granted", return_value=False):
+            decision = await authorize_action(bot, self._settings(), None, 2000, -1001, PermissionAction.BAN, None)  # type: ignore[arg-type]
+        self.assertTrue(decision.allowed)
+        self.assertEqual(decision.role, ActorRole.ADMIN)
 
     async def test_group_admin_can_short_mute(self) -> None:
         bot = FakeBot({(-1001, 2000): "administrator"})
-        decision = await authorize_action(bot, self._settings(), 2000, -1001, PermissionAction.MUTE_ANY, 1800)
+        with patch("bot.utils.permissions._is_admin_granted", return_value=False):
+            decision = await authorize_action(bot, self._settings(), None, 2000, -1001, PermissionAction.MUTE_ANY, 1800)  # type: ignore[arg-type]
         self.assertTrue(decision.allowed)
 
     async def test_group_admin_cannot_long_mute(self) -> None:
         bot = FakeBot({(-1001, 2000): "administrator"})
-        decision = await authorize_action(bot, self._settings(), 2000, -1001, PermissionAction.MUTE_ANY, 86400)
+        with patch("bot.utils.permissions._is_admin_granted", return_value=False):
+            decision = await authorize_action(bot, self._settings(), None, 2000, -1001, PermissionAction.MUTE_ANY, 86400)  # type: ignore[arg-type]
         self.assertFalse(decision.allowed)
 
     async def test_member_denied_warn(self) -> None:
         bot = FakeBot({})
-        decision = await authorize_action(bot, self._settings(), 3000, -1001, PermissionAction.WARN, None)
+        with patch("bot.utils.permissions._is_admin_granted", return_value=False):
+            decision = await authorize_action(bot, self._settings(), None, 3000, -1001, PermissionAction.WARN, None)  # type: ignore[arg-type]
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.role, ActorRole.MEMBER)
 
     async def test_group_admin_cannot_export_data(self) -> None:
         bot = FakeBot({(-1001, 2000): "administrator"})
-        decision = await authorize_action(bot, self._settings(), 2000, -1001, PermissionAction.EXPORT_DATA, None)
+        with patch("bot.utils.permissions._is_admin_granted", return_value=False):
+            decision = await authorize_action(bot, self._settings(), None, 2000, -1001, PermissionAction.EXPORT_DATA, None)  # type: ignore[arg-type]
         self.assertFalse(decision.allowed)
-        self.assertEqual(decision.role, ActorRole.GROUP_ADMIN)
+        self.assertEqual(decision.role, ActorRole.ADMIN)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from bot.database.session import session_scope
 from bot.schemas.permissions import PermissionAction
 from bot.services import moderation
 from bot.services.management_audit import log_management_event
+from bot.services.target_guard import ensure_target_action_allowed
 from bot.utils.permissions import authorize_action
 
 
@@ -64,6 +65,7 @@ async def on_moderate_callback(query: CallbackQuery, callback_data: ModerateActi
     decision = await authorize_action(
         bot=query.bot,
         settings=app_context.settings,
+        session_factory=app_context.session_factory,
         user_id=actor.id,
         chat_id=callback_data.chat_id,
         action=permission_action,
@@ -103,6 +105,17 @@ async def on_moderate_callback(query: CallbackQuery, callback_data: ModerateActi
         return
 
     if action == "warn":
+        allowed, reason = await ensure_target_action_allowed(
+            bot=query.bot,
+            settings=app_context.settings,
+            session_factory=app_context.session_factory,
+            actor_user_id=actor.id,
+            chat_id=chat_id,
+            target_user_id=user_id,
+        )
+        if not allowed:
+            await query.answer(reason, show_alert=True)
+            return
         await _ensure_target_user_exists(app_context, user_id)
         async for session in session_scope(app_context.session_factory):
             await repositories.create_punishment(
@@ -131,6 +144,17 @@ async def on_moderate_callback(query: CallbackQuery, callback_data: ModerateActi
     if action in {"mute10", "mute60"}:
         if duration_seconds is None:
             await query.answer("参数错误", show_alert=True)
+            return
+        allowed, reason = await ensure_target_action_allowed(
+            bot=query.bot,
+            settings=app_context.settings,
+            session_factory=app_context.session_factory,
+            actor_user_id=actor.id,
+            chat_id=chat_id,
+            target_user_id=user_id,
+        )
+        if not allowed:
+            await query.answer(reason, show_alert=True)
             return
         await _ensure_target_user_exists(app_context, user_id)
         try:
@@ -173,6 +197,17 @@ async def on_moderate_callback(query: CallbackQuery, callback_data: ModerateActi
         return
 
     if action == "ban":
+        allowed, reason = await ensure_target_action_allowed(
+            bot=query.bot,
+            settings=app_context.settings,
+            session_factory=app_context.session_factory,
+            actor_user_id=actor.id,
+            chat_id=chat_id,
+            target_user_id=user_id,
+        )
+        if not allowed:
+            await query.answer(reason, show_alert=True)
+            return
         await _ensure_target_user_exists(app_context, user_id)
         try:
             await moderation.ban_user(query.bot, chat_id, user_id)

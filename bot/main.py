@@ -33,6 +33,11 @@ async def setup_commands(bot: Bot) -> None:
         BotCommand(command="history", description="查询用户处罚历史"),
         BotCommand(command="setlog", description="设置日志群（仅Owner）"),
         BotCommand(command="reloadkeywords", description="刷新关键词词库（仅Owner）"),
+        BotCommand(command="lexicon", description="词库查询/导入/导出（仅Owner）"),
+        BotCommand(command="template", description="规则模板预览/应用（仅Owner）"),
+        BotCommand(command="nightmode", description="夜间策略配置（仅Owner）"),
+        BotCommand(command="falsepositive", description="误判标记与回滚（仅Owner）"),
+        BotCommand(command="fprules", description="高误判规则统计（仅Owner）"),
     ]
     group_commands = [
         BotCommand(command="help", description="查看命令与权限说明"),

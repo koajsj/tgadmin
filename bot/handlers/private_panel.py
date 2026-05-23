@@ -107,6 +107,7 @@ async def _groups_for_user_uncached(message: Message, app_context: AppContext) -
         decision = await authorize_action(
             bot=message.bot,
             settings=app_context.settings,
+            session_factory=app_context.session_factory,
             user_id=user.id,
             chat_id=item.id,
             action=PermissionAction.VIEW_SETTINGS,
@@ -178,6 +179,7 @@ async def _authorize_panel_action(
     decision = await authorize_action(
         bot=query.bot,
         settings=app_context.settings,
+        session_factory=app_context.session_factory,
         user_id=actor.id,
         chat_id=chat_id,
         action=action,
@@ -390,7 +392,9 @@ async def panel_callback(query: CallbackQuery, app_context: AppContext) -> None:
             text_body = (
                 "关键词/域名管理\n"
                 f"关键词总数: {len(keywords)}\n"
-                "域名白名单/黑名单: 已预留数据库表。\n"
+                "支持分类词库、风险等级、白名单域名/词。\n"
+                "私聊 Owner 命令:\n"
+                "/lexicon stats|search|add|del|enable|disable|import|export\n"
                 "提示: Owner 可使用 /reloadkeywords 刷新词库。"
             )
             await query.message.edit_text(text_body, reply_markup=back_home_keyboard(chat_id))

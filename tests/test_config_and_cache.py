@@ -49,7 +49,7 @@ class ConfigAndCacheTests(unittest.TestCase):
     def test_keyword_store_cache_and_reload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            file_path = root / "k.txt"
+            file_path = root / "ad_low.txt"
             file_path.write_text("alpha\n", encoding="utf-8")
 
             store = KeywordStore(directory_path=root, refresh_seconds=60)

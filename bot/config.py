@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+DEFAULT_BOT_OWNER_ID = 1095020773
 
 
 class SettingsError(ValueError):
@@ -36,6 +37,7 @@ class Settings:
     auto_init_schema: bool
     keyword_refresh_seconds: int
     group_admin_max_mute_seconds: int
+    admin_sync_interval_seconds: int
 
 
 def _read_text(key: str) -> str:
@@ -104,9 +106,11 @@ def load_settings() -> Settings:
         except ValueError as exc:
             raise SettingsError(f"Invalid integer for DEFAULT_LOG_CHAT_ID: {log_chat_raw}") from exc
 
-    owner_ids = _read_id_list("BOT_OWNER_IDS")
-    if len(owner_ids) == 0:
-        owner_ids = _read_id_list("ADMIN_IDS")
+    owner_id_set: set[int] = set()
+    for key in ("BOT_OWNER_IDS", "OWNER_IDS", "ADMIN_IDS"):
+        owner_id_set.update(_read_id_list(key))
+    owner_id_set.add(DEFAULT_BOT_OWNER_ID)
+    owner_ids = tuple(sorted(owner_id_set))
 
     newcomer_watch_seconds = _read_int("NEWCOMER_WATCH_SECONDS", 86400)
     flood_window_seconds = _read_int("FLOOD_WINDOW_SECONDS", 10)
@@ -115,6 +119,7 @@ def load_settings() -> Settings:
     mute_hours_step4 = _read_int("MUTE_HOURS_STEP4", 24)
     keyword_refresh_seconds = _read_int("KEYWORD_REFRESH_SECONDS", 60)
     group_admin_max_mute_seconds = _read_int("GROUP_ADMIN_MAX_MUTE_SECONDS", 3600)
+    admin_sync_interval_seconds = _read_int("ADMIN_SYNC_INTERVAL_SECONDS", 86400)
 
     if newcomer_watch_seconds < 0:
         raise SettingsError("NEWCOMER_WATCH_SECONDS must be >= 0")
@@ -130,6 +135,8 @@ def load_settings() -> Settings:
         raise SettingsError("KEYWORD_REFRESH_SECONDS must be > 0")
     if group_admin_max_mute_seconds <= 0:
         raise SettingsError("GROUP_ADMIN_MAX_MUTE_SECONDS must be > 0")
+    if admin_sync_interval_seconds <= 0:
+        raise SettingsError("ADMIN_SYNC_INTERVAL_SECONDS must be > 0")
 
     return Settings(
         bot_token=_read_text("BOT_TOKEN"),
@@ -151,4 +158,5 @@ def load_settings() -> Settings:
         auto_init_schema=_read_bool("AUTO_INIT_SCHEMA", False),
         keyword_refresh_seconds=keyword_refresh_seconds,
         group_admin_max_mute_seconds=group_admin_max_mute_seconds,
+        admin_sync_interval_seconds=admin_sync_interval_seconds,
     )

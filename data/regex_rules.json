@@ -1,0 +1,50 @@
+[
+  {
+    "entry_id": "contact_wechat",
+    "kind": "regex",
+    "category": "contact_ads",
+    "risk_level": "high",
+    "value": "(微|威|v|V)[信\\s:：_-]{0,2}[a-z0-9_]{5,20}",
+    "flags": "i",
+    "enabled": true,
+    "source": "builtin:regex",
+    "observe_only": false,
+    "action_override": "mute"
+  },
+  {
+    "entry_id": "contact_telegram",
+    "kind": "regex",
+    "category": "contact_ads",
+    "risk_level": "high",
+    "value": "(t\\.me/|telegram\\.me/|tg\\s*[:：]\\s*)[a-z0-9_]{4,}",
+    "flags": "i",
+    "enabled": true,
+    "source": "builtin:regex",
+    "observe_only": false,
+    "action_override": "mute"
+  },
+  {
+    "entry_id": "crypto_seed",
+    "kind": "regex",
+    "category": "crypto_scam",
+    "risk_level": "severe",
+    "value": "(助记词|私钥|mnemonic|seed\\s*phrase).*(发|给|提交|输入)",
+    "flags": "i",
+    "enabled": true,
+    "source": "builtin:regex",
+    "observe_only": false,
+    "action_override": "ban"
+  },
+  {
+    "entry_id": "adult_contact_trade",
+    "kind": "regex",
+    "category": "adult_contact",
+    "risk_level": "high",
+    "value": "(约|包夜|上门|援交|有偿|交易).*(私聊|联系|加我)",
+    "flags": "i",
+    "enabled": true,
+    "source": "builtin:regex",
+    "observe_only": false,
+    "action_override": "mute"
+  }
+]

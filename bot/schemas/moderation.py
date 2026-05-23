@@ -1,6 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
+
+from bot.schemas.lexicon import ModerationAction, RiskLevel
 
 
 @dataclass(frozen=True)
@@ -11,6 +13,11 @@ class RuleHit:
     is_link: bool
     is_keyword: bool
     is_flood: bool
+    category: str
+    risk_level: RiskLevel
+    action: ModerationAction
+    trigger: str
+    source: str
 
 
 @dataclass(frozen=True)

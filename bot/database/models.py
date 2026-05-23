@@ -173,17 +173,6 @@ class BlacklistDomain(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class InviteSource(Base):
-    __tablename__ = "invite_sources"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    chat_id: Mapped[int] = mapped_column(ForeignKey("chats.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    invite_link: Mapped[str | None] = mapped_column(Text, nullable=True)
-    invite_link_creator_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
 class MessageStat(Base):
     __tablename__ = "message_stats"
     __table_args__ = (UniqueConstraint("chat_id", "user_id", name="uq_message_stats_chat_user"),)
@@ -210,4 +199,44 @@ class VerificationSession(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ChatAdmin(Base):
+    __tablename__ = "chat_admins"
+    __table_args__ = (UniqueConstraint("chat_id", "user_id", name="uq_chat_admin_chat_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(ForeignKey("chats.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    can_delete_messages: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    can_restrict_members: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    can_promote_members: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    can_manage_chat: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class AdminGrant(Base):
+    __tablename__ = "admin_grants"
+    __table_args__ = (UniqueConstraint("chat_id", "user_id", name="uq_admin_grant_chat_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(ForeignKey("chats.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    granted_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UserReport(Base):
+    __tablename__ = "user_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    reporter_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    target_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    message_link: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
