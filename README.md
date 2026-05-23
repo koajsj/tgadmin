@@ -12,6 +12,7 @@
 - 结构特征：识别联系方式、收益诱导、拉群、博彩、成人引流等组合信号
 - 词库管理：支持 `.txt` 词库、自定义词、学习词、忽略词导入导出
 - 私聊后台：规则开关、处罚动作、刷屏阈值、禁言时长和学习状态可查看
+- 统计面板：可查看学习情况统计和群内数据统计
 - 管理员保护：同步群管理员，避免误处理管理消息
 - 可选日志群：记录已处理消息的原因、分数和摘要
 
@@ -52,11 +53,13 @@ sudo bash setup_debian.sh
 /addkeyword 关键词
 /delkeyword 关键词
 /learn
+/learningstats
+/groupstats
 /exportkeywords
 /importkeywords
 ```
 
-`/status` 会显示风险阈值、学习词数量、忽略词数量和当前高频学习样本。`/exportkeywords` 会导出自定义词、学习词和忽略词 JSON；`/importkeywords` 支持 JSON、纯文本词表，或回复一个上传的词库文件导入。
+`/status` 会显示风险阈值、学习词数量、忽略词数量、学习统计和群统计总览。`/learningstats` 会单独列出学习情况统计；`/groupstats` 会显示当前群或私聊里指定群的消息统计。`/exportkeywords` 会导出自定义词、学习词和忽略词 JSON；`/importkeywords` 支持 JSON、纯文本词表，或回复一个上传的词库文件导入。
 
 ## 学习机制
 
@@ -70,6 +73,13 @@ sudo bash setup_debian.sh
 - 达到更高命中阈值后才会升级到高危自定义词
 
 这样可以减少人工维护，也能避免自学习把普通聊天词直接写进高危词库。
+
+## 统计
+
+学习统计和群内数据统计会保存在 `data/state.json`，重启后仍然保留。
+
+- 学习统计：学习词数量、忽略词数量、垃圾反馈次数、清洁反馈次数、当前高频样本
+- 群内数据统计：每个群的累计消息、垃圾消息、删除、禁言、封禁次数
 
 ## 词库
 
@@ -99,6 +109,7 @@ sudo bash setup_debian.sh
 - `DELETE_SCORE_THRESHOLD`：达到这个分数才删除消息
 - `MUTE_SCORE_THRESHOLD`：达到这个分数才禁言
 - `BAN_SCORE_THRESHOLD`：达到这个分数直接封禁
+- `BAN_AFTER_STRIKES`：同一用户重复触发高风险消息后的累计封禁阈值
 - `LEARNING_MIN_*`：进入学习池前的可疑样本阈值
 - `LEARNING_PROMOTE_*`：学习词升级为高危词前的阈值
 - `LEARNING_IGNORE_*`：自动忽略正常词的阈值

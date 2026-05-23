@@ -103,6 +103,14 @@ def _action_label(action: str) -> str:
     return "封禁" if action == "ban" else "禁言"
 
 
+def _format_group_stats_line(item: dict[str, Any]) -> str:
+    return (
+        f"{item['chat_id']} | 消息 {item['messages_seen']} | "
+        f"垃圾 {item['spam_messages']} | 删 {item['deleted_messages']} | "
+        f"禁言 {item['muted_messages']} | 封禁 {item['banned_messages']}"
+    )
+
+
 async def _reply_text(update: Update, text: str) -> None:
     message = update.effective_message
     if message is not None:
@@ -110,6 +118,8 @@ async def _reply_text(update: Update, text: str) -> None:
 
 
 def _status_text(user_id: int | None) -> str:
+    learning_stats = settings_store.learning_stats_snapshot()
+    group_totals = settings_store.group_stats_snapshot(None, 5)["totals"]
     learned_snapshot = settings_store.learned_keyword_snapshot(5)
     learned_summary = "，".join(
         f"{item['keyword']}({item['hits']})" for item in learned_snapshot
@@ -126,6 +136,8 @@ def _status_text(user_id: int | None) -> str:
         f"学习关键词：{settings_store.learned_keyword_count} 个\n"
         f"忽略词：{len(settings_store.ignored_keywords)} 个\n"
         f"学习样本：{learned_summary}\n"
+        f"学习统计：样本 {learning_stats['learned_keywords']} / 忽略 {learning_stats['ignored_keywords']} / 垃圾反馈 {learning_stats['spam_feedback']} / 清洁反馈 {learning_stats['benign_feedback']}\n"
+        f"群统计：{group_totals['groups']} 群 / 消息 {group_totals['messages_seen']} / 删除 {group_totals['deleted_messages']} / 禁言 {group_totals['muted_messages']} / 封禁 {group_totals['banned_messages']}\n"
         f"自学习：{_flag(settings.learning_enabled)}\n"
         f"刷屏规则：{settings.flood_max_messages} 条 / {settings.flood_window_seconds} 秒\n"
         "规则开关："
@@ -137,8 +149,9 @@ def _status_text(user_id: int | None) -> str:
         f"超长{_flag(settings.rule_enable_length)}\n"
         f"管理员同步：{admin_registry.admin_count} 人，已记录群 {admin_registry.known_chat_count} 个\n\n"
         "常用命令：\n"
-        "/status | /reloadkeywords | /action mute | /action ban\n"
-        "/mute 2h | /flood 6 10 | /addkeyword 关键词 | /delkeyword 关键词 | /learn"
+        "/status | /learningstats | /groupstats | /reloadkeywords\n"
+        "/action mute | /action ban | /mute 2h | /flood 6 10\n"
+        "/addkeyword 关键词 | /delkeyword 关键词 | /learn | /exportkeywords | /importkeywords"
     )
 
 
@@ -356,6 +369,72 @@ async def admin_toggle_learning(update: Update, context: ContextTypes.DEFAULT_TY
     await _reply_text(update, f"自学习功能已{_flag(new_value)}。")
 
 
+async def admin_learning_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _require_private_admin(update, context):
+        return
+
+    snapshot = settings_store.learning_stats_snapshot()
+    top_keywords = snapshot["top_keywords"]
+    top_summary = "，".join(
+        f"{item['keyword']}({item['hits']})" for item in top_keywords
+    ) or "暂无"
+    await _reply_text(
+        update,
+        "学习情况统计\n"
+        f"学习词：{snapshot['learned_keywords']} 个\n"
+        f"忽略词：{snapshot['ignored_keywords']} 个\n"
+        f"垃圾反馈：{snapshot['spam_feedback']} 次\n"
+        f"清洁反馈：{snapshot['benign_feedback']} 次\n"
+        f"高频学习样本：{top_summary}",
+    )
+
+
+async def admin_group_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.effective_message
+    chat = update.effective_chat
+    if message is None or chat is None:
+        return
+
+    if chat.type == "private":
+        if not await _require_private_admin(update, context):
+            return
+        target_chat_id = None
+        if context.args:
+            try:
+                target_chat_id = int(context.args[0])
+            except ValueError:
+                await _reply_text(update, "用法：/groupstats 或 /groupstats -1001234567890")
+                return
+        snapshot = settings_store.group_stats_snapshot(target_chat_id, 5)
+    else:
+        user = update.effective_user
+        if user is None:
+            return
+        if _is_owner(user.id):
+            snapshot = settings_store.group_stats_snapshot(chat.id, 5)
+        else:
+            await admin_registry.refresh_known_chats(context.bot)
+            if not await admin_cache.is_admin(context.bot, chat.id, user.id):
+                await _reply_text(update, "无权限查看群统计。")
+                return
+            snapshot = settings_store.group_stats_snapshot(chat.id, 5)
+
+    totals = snapshot["totals"]
+    groups = snapshot["groups"]
+    group_lines = "\n".join(_format_group_stats_line(item) for item in groups) or "暂无"
+    await _reply_text(
+        update,
+        "群内数据统计\n"
+        f"已记录群：{totals['groups']} 个\n"
+        f"累计消息：{totals['messages_seen']} 条\n"
+        f"垃圾消息：{totals['spam_messages']} 条\n"
+        f"已删除：{totals['deleted_messages']} 条\n"
+        f"已禁言：{totals['muted_messages']} 条\n"
+        f"已封禁：{totals['banned_messages']} 条\n"
+        f"最近记录：\n{group_lines}",
+    )
+
+
 async def admin_export_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _require_private_admin(update, context):
         return
@@ -500,11 +579,11 @@ async def _delete_spam_message(update: Update) -> bool:
     return True
 
 
-async def _apply_action(update: Update, context: ContextTypes.DEFAULT_TYPE, score: int) -> None:
+async def _apply_action(update: Update, context: ContextTypes.DEFAULT_TYPE, score: int) -> str:
     chat = update.effective_chat
     user = update.effective_user
     if chat is None or user is None:
-        return
+        return "none"
 
     should_ban = score >= settings.ban_score_threshold or (
         settings.action == "ban" and score >= settings.mute_score_threshold
@@ -519,10 +598,10 @@ async def _apply_action(update: Update, context: ContextTypes.DEFAULT_TYPE, scor
                 "Failed to ban user",
                 extra={"chat_id": chat.id, "user_id": user.id, "error": str(exc)},
             )
-        return
+        return "banned"
 
     if not should_mute or settings.mute_duration_seconds <= 0:
-        return
+        return "none"
 
     until = datetime.now(timezone.utc) + timedelta(seconds=settings.mute_duration_seconds)
     permissions = ChatPermissions(can_send_messages=False)
@@ -538,19 +617,20 @@ async def _apply_action(update: Update, context: ContextTypes.DEFAULT_TYPE, scor
             "Failed to mute user",
             extra={"chat_id": chat.id, "user_id": user.id, "error": str(exc)},
         )
+    return "muted"
 
 
-async def _apply_strike_ban(update: Update, context: ContextTypes.DEFAULT_TYPE, score: int) -> None:
+async def _apply_strike_ban(update: Update, context: ContextTypes.DEFAULT_TYPE, score: int) -> bool:
     chat = update.effective_chat
     user = update.effective_user
     if chat is None or user is None or settings.ban_after_strikes <= 0:
-        return
+        return False
     if score < settings.mute_score_threshold:
-        return
+        return False
 
     strikes = strike_tracker.add_strike(chat.id, user.id, time.time())
     if strikes < settings.ban_after_strikes:
-        return
+        return False
 
     try:
         await context.bot.ban_chat_member(chat.id, user.id)
@@ -559,6 +639,7 @@ async def _apply_strike_ban(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             "Failed to ban user after strikes",
             extra={"chat_id": chat.id, "user_id": user.id, "strikes": strikes, "error": str(exc)},
         )
+    return True
 
 
 async def _log_moderation(
@@ -610,6 +691,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     admin_registry.mark_chat(chat.id)
     await admin_registry.refresh_chat(context.bot, chat.id)
 
+    settings_store.record_group_seen(chat.id, user.id, time.time())
+
     if _is_owner(user.id):
         return
 
@@ -629,8 +712,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not deleted:
         return
 
-    await _apply_action(update, context, result.score)
-    await _apply_strike_ban(update, context, result.score)
+    action_taken = await _apply_action(update, context, result.score)
+    if await _apply_strike_ban(update, context, result.score):
+        action_taken = "banned"
+
+    settings_store.record_group_spam(chat.id, user.id, action_taken, result.score, time.time())
 
     await _log_moderation(update, context, result.reasons, result.score, text, learned_terms)
 
@@ -659,6 +745,8 @@ async def post_init(application: Application) -> None:
         BotCommand("addkeyword", "添加自定义关键词"),
         BotCommand("delkeyword", "删除自定义关键词"),
         BotCommand("learn", "切换自学习功能"),
+        BotCommand("learningstats", "查看学习情况统计"),
+        BotCommand("groupstats", "查看群内数据统计"),
         BotCommand("exportkeywords", "导出自定义和学习词库"),
         BotCommand("importkeywords", "导入词库 JSON 或文本"),
     ]
@@ -682,6 +770,8 @@ def main() -> None:
     application.add_handler(CommandHandler("addkeyword", admin_add_keyword))
     application.add_handler(CommandHandler("delkeyword", admin_del_keyword))
     application.add_handler(CommandHandler(["learn", "togglelearning"], admin_toggle_learning))
+    application.add_handler(CommandHandler("learningstats", admin_learning_stats))
+    application.add_handler(CommandHandler("groupstats", admin_group_stats))
     application.add_handler(CommandHandler("exportkeywords", admin_export_keywords))
     application.add_handler(CommandHandler("importkeywords", admin_import_keywords))
     application.add_handler(CallbackQueryHandler(admin_callback))

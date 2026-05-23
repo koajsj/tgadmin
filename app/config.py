@@ -274,6 +274,49 @@ def _serialize_learned_meta(meta: dict[str, dict[str, Any]]) -> list[dict[str, A
     return result
 
 
+def _load_group_stats(raw: Any) -> dict[str, dict[str, Any]]:
+    stats: dict[str, dict[str, Any]] = {}
+    if not isinstance(raw, dict):
+        return stats
+
+    for chat_id, item in raw.items():
+        if not isinstance(item, dict):
+            continue
+        key = str(chat_id)
+        try:
+            stats[key] = {
+                "chat_id": key,
+                "messages_seen": int(item.get("messages_seen", 0)),
+                "spam_messages": int(item.get("spam_messages", 0)),
+                "deleted_messages": int(item.get("deleted_messages", 0)),
+                "muted_messages": int(item.get("muted_messages", 0)),
+                "banned_messages": int(item.get("banned_messages", 0)),
+                "last_seen": float(item.get("last_seen", 0.0)),
+                "last_user_id": int(item.get("last_user_id", 0)),
+                "last_score": int(item.get("last_score", 0)),
+            }
+        except (TypeError, ValueError):
+            continue
+    return stats
+
+
+def _serialize_group_stats(stats: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for chat_id, item in stats.items():
+        result[str(chat_id)] = {
+            "chat_id": str(item.get("chat_id", chat_id)),
+            "messages_seen": int(item.get("messages_seen", 0)),
+            "spam_messages": int(item.get("spam_messages", 0)),
+            "deleted_messages": int(item.get("deleted_messages", 0)),
+            "muted_messages": int(item.get("muted_messages", 0)),
+            "banned_messages": int(item.get("banned_messages", 0)),
+            "last_seen": float(item.get("last_seen", 0.0)),
+            "last_user_id": int(item.get("last_user_id", 0)),
+            "last_score": int(item.get("last_score", 0)),
+        }
+    return result
+
+
 class SettingsStore:
     def __init__(
         self,
@@ -285,6 +328,7 @@ class SettingsStore:
         learned_meta: dict[str, dict[str, Any]],
         ignored_keywords: list[str],
         owner_user_ids: list[int],
+        group_stats: dict[str, dict[str, Any]],
     ) -> None:
         self._settings = settings
         self._state_path = state_path
@@ -294,6 +338,7 @@ class SettingsStore:
         self._learned_meta = learned_meta
         self._ignored_keywords = _dedupe(ignored_keywords)
         self._owner_user_ids = owner_user_ids
+        self._group_stats = group_stats
         self._settings.owner_user_ids = owner_user_ids
         self._last_file_keyword_count = 0
         self._sync_learned_keywords()
@@ -324,12 +369,80 @@ class SettingsStore:
         return self._owner_user_ids
 
     @property
+    def group_stats(self) -> dict[str, dict[str, Any]]:
+        return self._group_stats
+
+    @property
     def last_file_keyword_count(self) -> int:
         return self._last_file_keyword_count
 
     @property
     def learned_keyword_count(self) -> int:
         return len(self._learned_meta)
+
+    def learning_stats_snapshot(self) -> dict[str, Any]:
+        spam_feedback = sum(int(item.get("spam_hits", 0)) for item in self._learned_meta.values())
+        benign_feedback = sum(int(item.get("benign_hits", 0)) for item in self._learned_meta.values())
+        return {
+            "learned_keywords": len(self._learned_meta),
+            "ignored_keywords": len(self._ignored_keywords),
+            "spam_feedback": spam_feedback,
+            "benign_feedback": benign_feedback,
+            "top_keywords": self.learned_keyword_snapshot(5),
+        }
+
+    def group_stats_snapshot(self, chat_id: int | None, limit: int) -> dict[str, Any]:
+        if chat_id is not None:
+            record = self._group_stats.get(str(chat_id), {})
+            return {
+                "scope": "single",
+                "groups": [self._group_stats_item(record, str(chat_id))],
+                "totals": self._group_stats_totals(),
+            }
+
+        items = sorted(
+            self._group_stats.values(),
+            key=lambda item: (
+                int(item.get("messages_seen", 0)),
+                float(item.get("last_seen", 0.0)),
+            ),
+            reverse=True,
+        )
+        return {
+            "scope": "all",
+            "groups": [self._group_stats_item(item, str(item.get("chat_id", ""))) for item in items[:limit]],
+            "totals": self._group_stats_totals(),
+        }
+
+    def _group_stats_item(self, record: dict[str, Any], chat_id: str) -> dict[str, Any]:
+        return {
+            "chat_id": chat_id,
+            "messages_seen": int(record.get("messages_seen", 0)),
+            "spam_messages": int(record.get("spam_messages", 0)),
+            "deleted_messages": int(record.get("deleted_messages", 0)),
+            "muted_messages": int(record.get("muted_messages", 0)),
+            "banned_messages": int(record.get("banned_messages", 0)),
+            "last_seen": float(record.get("last_seen", 0.0)),
+            "last_user_id": int(record.get("last_user_id", 0)),
+            "last_score": int(record.get("last_score", 0)),
+        }
+
+    def _group_stats_totals(self) -> dict[str, int]:
+        totals = {
+            "groups": len(self._group_stats),
+            "messages_seen": 0,
+            "spam_messages": 0,
+            "deleted_messages": 0,
+            "muted_messages": 0,
+            "banned_messages": 0,
+        }
+        for record in self._group_stats.values():
+            totals["messages_seen"] += int(record.get("messages_seen", 0))
+            totals["spam_messages"] += int(record.get("spam_messages", 0))
+            totals["deleted_messages"] += int(record.get("deleted_messages", 0))
+            totals["muted_messages"] += int(record.get("muted_messages", 0))
+            totals["banned_messages"] += int(record.get("banned_messages", 0))
+        return totals
 
     def learned_keyword_snapshot(self, limit: int) -> list[dict[str, Any]]:
         items = sorted(
@@ -463,6 +576,55 @@ class SettingsStore:
         self.save_state()
         return "updated"
 
+    def record_group_seen(self, chat_id: int, user_id: int, now: float) -> None:
+        key = str(chat_id)
+        record = self._group_stats.setdefault(
+            key,
+            {
+                "chat_id": key,
+                "messages_seen": 0,
+                "spam_messages": 0,
+                "deleted_messages": 0,
+                "muted_messages": 0,
+                "banned_messages": 0,
+                "last_seen": now,
+                "last_user_id": user_id,
+                "last_score": 0,
+            },
+        )
+        record["messages_seen"] = int(record.get("messages_seen", 0)) + 1
+        record["last_seen"] = now
+        record["last_user_id"] = user_id
+        self.save_state()
+
+    def record_group_spam(self, chat_id: int, user_id: int, action: str, score: int, now: float) -> None:
+        key = str(chat_id)
+        record = self._group_stats.setdefault(
+            key,
+            {
+                "chat_id": key,
+                "messages_seen": 0,
+                "spam_messages": 0,
+                "deleted_messages": 0,
+                "muted_messages": 0,
+                "banned_messages": 0,
+                "last_seen": now,
+                "last_user_id": user_id,
+                "last_score": score,
+            },
+        )
+        record["spam_messages"] = int(record.get("spam_messages", 0)) + 1
+        if action == "deleted":
+            record["deleted_messages"] = int(record.get("deleted_messages", 0)) + 1
+        elif action == "muted":
+            record["muted_messages"] = int(record.get("muted_messages", 0)) + 1
+        elif action == "banned":
+            record["banned_messages"] = int(record.get("banned_messages", 0)) + 1
+        record["last_seen"] = now
+        record["last_user_id"] = user_id
+        record["last_score"] = score
+        self.save_state()
+
     def touch_learned_keyword(self, keyword: str, now: float) -> None:
         normalized = _normalize_keyword(keyword)
         if normalized not in self._learned_meta:
@@ -581,6 +743,7 @@ class SettingsStore:
         data["learned_keywords"] = _serialize_learned_meta(self._learned_meta)
         data["ignored_keywords"] = list(self._ignored_keywords)
         data["owner_user_ids"] = list(self._owner_user_ids)
+        data["group_stats"] = _serialize_group_stats(self._group_stats)
         _save_state(self._state_path, data)
 
 
@@ -608,6 +771,7 @@ def load_settings_store() -> SettingsStore:
         for item in state.get("ignored_keywords", [])
         if _normalize_keyword(str(item))
     ]
+    group_stats = _load_group_stats(state.get("group_stats", {}))
 
     raw_owner_ids = state.get("owner_user_ids", [])
     owner_user_ids: list[int] = []
@@ -623,7 +787,7 @@ def load_settings_store() -> SettingsStore:
         log_chat_id=log_chat_id,
         action=action,
         mute_duration_seconds=_getenv_int("MUTE_DURATION_SECONDS", 86400),
-        ban_after_strikes=_getenv_int("BAN_AFTER_STRIKES", 0),
+        ban_after_strikes=_getenv_int("BAN_AFTER_STRIKES", 2),
         strike_window_seconds=_getenv_int("STRIKE_WINDOW_SECONDS", 86400),
         admin_cache_ttl_seconds=_getenv_int("ADMIN_CACHE_TTL_SECONDS", 300),
         owner_user_ids=owner_user_ids,
@@ -650,9 +814,9 @@ def load_settings_store() -> SettingsStore:
         flood_window_seconds=_getenv_int("FLOOD_WINDOW_SECONDS", 10),
         repeat_max_dupes=_getenv_int("REPEAT_MAX_DUPES", 2),
         repeat_window_seconds=_getenv_int("REPEAT_WINDOW_SECONDS", 60),
-        delete_score_threshold=_getenv_int("DELETE_SCORE_THRESHOLD", 20),
-        mute_score_threshold=_getenv_int("MUTE_SCORE_THRESHOLD", 60),
-        ban_score_threshold=_getenv_int("BAN_SCORE_THRESHOLD", 100),
+        delete_score_threshold=_getenv_int("DELETE_SCORE_THRESHOLD", 15),
+        mute_score_threshold=_getenv_int("MUTE_SCORE_THRESHOLD", 45),
+        ban_score_threshold=_getenv_int("BAN_SCORE_THRESHOLD", 75),
         link_score=_getenv_int("LINK_SCORE", 35),
         keyword_score=_getenv_int("KEYWORD_SCORE", 60),
         learned_keyword_score=_getenv_int("LEARNED_KEYWORD_SCORE", 18),
@@ -680,6 +844,7 @@ def load_settings_store() -> SettingsStore:
         learned_meta,
         ignored_keywords,
         owner_user_ids,
+        group_stats,
     )
 
 
